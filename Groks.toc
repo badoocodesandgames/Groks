@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: Groks
-## Notes: Testing
+## Notes: Leveling Exp Tracker shown In A Popup
 ## Author: Badoo
 ## Version: 1.0
 
