@@ -1,0 +1,158 @@
+local NewTestDB = NewTestDB or {}
+NewTestDB.chatEnabled = NewTestDB.chatEnabled or true -- Default to enabled
+
+-- Variables
+local previousXP = UnitXP("player")
+local totalXPGained = NewTestDB.totalXPGained or 0
+local lastKilledUnit = nil
+
+-- Update function
+local function UpdateXP()
+    local currentXP = UnitXP("player")
+    local maxXP = UnitXPMax("player")
+    local xpDifference = currentXP - previousXP
+    local xpRemaining = maxXP - currentXP
+    local currentLevel = UnitLevel("player")
+    local nextLevel = currentLevel + 1
+
+    if xpDifference > 0 then
+        totalXPGained = totalXPGained + xpDifference
+        NewTestDB.totalXPGained = totalXPGained
+
+        -- Chat output if enabled
+        if NewTestDB.chatEnabled then
+            print("Exp Gained: |cFF00FF00" .. xpDifference .. " |r")
+            print("Total Exp Gained: |cFF00FF00" .. totalXPGained .. " |r")
+            if lastKilledUnit then
+                print("Killed: |cFFFF0000" .. lastKilledUnit .. " |r")
+            end
+            print("|cFF00FF00" .. xpRemaining .. " |r Exp To Level |cFF00FF00" .. nextLevel .. " |r")
+            local killsNeeded = math.ceil(xpRemaining / xpDifference)
+            print("|cFF00FF00" .. killsNeeded .. "|r Kills To Level |cFF00FF00" .. nextLevel .. " |r")
+        end
+        previousXP = currentXP
+    end
+end
+
+-- Event handler
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_XP_UPDATE")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "PLAYER_XP_UPDATE" then
+        UpdateXP()
+    elseif event == "PLAYER_LOGIN" then
+        NewTestDB.chatEnabled = NewTestDB.chatEnabled or true -- Ensure it's set on login
+        UpdateXP()
+    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        local _, subevent, srcGUID, _, _, destGUID, destName = ...
+        if subevent == "PARTY_KILL" and srcGUID == UnitGUID("player") then
+            lastKilledUnit = destName
+            UpdateXP() -- Update immediately on kill
+        end
+    end
+end)
+
+-- Slash command to toggle chat output
+SLASH_EXPINFO1 = "/expinfo"
+SlashCmdList["EXPINFO"] = function()
+    NewTestDB.chatEnabled = not NewTestDB.chatEnabled
+    print("Exp Info In Chat: " .. (NewTestDB.chatEnabled and "Enabled" or "Disabled"))
+end
+
+
+
+-------------------------------------------------------------------------------
+-- ADD FRIEND POPUP -----------------------------------------------------------
+-------------------------------------------------------------------------------
+
+-- Create the main popup frame
+local frame = CreateFrame("Frame", "AddFriendFrame", UIParent)
+frame:SetSize(250, 120)
+frame:SetPoint("CENTER")
+frame:Hide()
+frame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+frame:SetBackdropColor(0, 0, 0, 0.9)
+
+-- Make frame draggable
+frame:SetMovable(true)
+frame:EnableMouse(true)
+frame:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+        self:StartMoving()
+    end
+end)
+frame:SetScript("OnMouseUp", function(self)
+    self:StopMovingOrSizing()
+end)
+
+-- Close with Escape
+frame:EnableKeyboard(true)
+frame:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        self:Hide()
+    end
+end)
+tinsert(UISpecialFrames, "AddFriendFrame")
+
+-- Close button
+local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+closeButton:SetPoint("TOPRIGHT", -2, -2)
+closeButton:SetScript("OnClick", function() frame:Hide() end)
+
+-- Title
+frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+frame.title:SetPoint("TOP", frame, "TOP", 0, -5)
+frame.title:SetText("Add Friend")
+
+-- Edit box for entering the friend's name
+local editBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+editBox:SetSize(200, 20)
+editBox:SetPoint("TOP", frame, "TOP", 0, -30)
+editBox:SetAutoFocus(false)
+editBox:SetMaxLetters(12) -- WoW 3.3.5 character name limit
+editBox:SetFontObject("GameFontNormal")
+
+-- Add Friend button
+local addButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+addButton:SetSize(100, 22)
+addButton:SetPoint("TOP", editBox, "BOTTOM", 0, -10)
+addButton:SetText("Add Friend")
+addButton:SetScript("OnClick", function()
+    local name = editBox:GetText():trim()
+    if name and name ~= "" then
+        -- Send friend request in WoW 3.3.5
+        AddFriend(name)
+        print("Friend request sent to: " .. name)
+        editBox:SetText("") -- Clear the edit box
+        frame:Hide() -- Close the frame
+    else
+        print("Please enter a valid name.")
+    end
+end)
+
+-- Allow Enter key to trigger the Add Friend button
+editBox:SetScript("OnEnterPressed", function()
+    addButton:Click()
+end)
+
+-- Slash command to toggle the frame
+SLASH_ADDF1 = "/addf"
+SlashCmdList["ADDF"] = function()
+    if frame:IsShown() then
+        frame:Hide()
+    else
+        frame:Show()
+        editBox:SetFocus() -- Automatically focus the edit box when opened
+    end
+end
+
+-------------------------------------------------------------------------------
+-- END ADD FRIEND POPUP -----------------------------------------------------------
+-------------------------------------------------------------------------------

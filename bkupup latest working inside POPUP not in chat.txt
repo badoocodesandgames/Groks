@@ -1,0 +1,227 @@
+local NewTestDB = NewTestDB or {}
+
+-- Create the main popup frame
+local frame = CreateFrame("Frame", "ExpInfoFrame", UIParent)
+frame:SetSize(300, 250)
+frame:SetPoint("CENTER")
+frame:Hide()
+frame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+frame:SetBackdropColor(0, 0, 0, 0.9)
+frame:SetMovable(true)
+frame:EnableMouse(true)
+frame:RegisterForDrag("LeftButton")
+frame:SetScript("OnDragStart", frame.StartMoving)
+frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+tinsert(UISpecialFrames, "ExpInfoFrame")
+
+-- Close button
+local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+closeButton:SetPoint("TOPRIGHT", -2, -2)
+closeButton:SetScript("OnClick", function() frame:Hide() end)
+
+-- Title
+frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+frame.title:SetPoint("TOP", frame, "TOP", 0, -5)
+frame.title:SetText("Experience Info")
+
+-- Text displays
+local expGainedText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+expGainedText:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -30)
+expGainedText:SetTextColor(0, 1, 0, 1)
+
+local totalExpText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+totalExpText:SetPoint("TOPLEFT", expGainedText, "BOTTOMLEFT", 0, -10)
+totalExpText:SetTextColor(0, 1, 0, 1)
+
+local lastKillText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+lastKillText:SetPoint("TOPLEFT", totalExpText, "BOTTOMLEFT", 0, -10)
+lastKillText:SetTextColor(1, 0, 0, 1)
+
+local expToLevelText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+expToLevelText:SetPoint("TOPLEFT", lastKillText, "BOTTOMLEFT", 0, -10)
+expToLevelText:SetTextColor(0, 1, 0, 1)
+
+local killsToLevelText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+killsToLevelText:SetPoint("TOPLEFT", expToLevelText, "BOTTOMLEFT", 0, -10)
+killsToLevelText:SetTextColor(0, 1, 0, 1)
+
+-- Checkbox
+local chatCheckbox = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+chatCheckbox:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -150)
+chatCheckbox:SetSize(24, 24)
+chatCheckbox.text = chatCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+chatCheckbox.text:SetPoint("LEFT", chatCheckbox, "RIGHT", 5, 0)
+chatCheckbox.text:SetText("Show in Chat")
+
+-- Variables
+local previousXP = UnitXP("player")
+local totalXPGained = NewTestDB.totalXPGained or 0
+local lastKilledUnit = nil
+local lastXPUpdate = 0
+local lastValidXPDiff = NewTestDB.lastValidXPDiff or 1  -- Prevent divide-by-zero
+
+-- Update function
+local function UpdateXP()
+    local currentXP = UnitXP("player")
+    local maxXP = UnitXPMax("player")
+    local xpDifference = currentXP - previousXP
+    local xpRemaining = maxXP - currentXP
+    local currentLevel = UnitLevel("player")
+    local nextLevel = currentLevel + 1
+
+    if xpDifference > 0 then
+        totalXPGained = (NewTestDB.totalXPGained or 0) + xpDifference
+        NewTestDB.totalXPGained = totalXPGained
+        lastValidXPDiff = xpDifference
+        NewTestDB.lastValidXPDiff = lastValidXPDiff
+    end
+    previousXP = currentXP
+
+    local killsNeeded = math.ceil(xpRemaining / (lastValidXPDiff > 0 and lastValidXPDiff or 1))
+
+    -- Update UI texts
+    if frame:IsShown() then
+        expGainedText:SetText("Exp Gained: " .. xpDifference)
+        totalExpText:SetText("Total Exp Gained: " .. totalXPGained)
+        lastKillText:SetText("Killed: " .. (lastKilledUnit or "None"))
+        expToLevelText:SetText(xpRemaining .. " Exp To Level " .. nextLevel)
+        killsToLevelText:SetText(killsNeeded .. " Kills To Level " .. nextLevel)
+    end
+end
+
+-- Event handler
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_XP_UPDATE")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "PLAYER_XP_UPDATE" then
+        UpdateXP()
+    elseif event == "PLAYER_LOGIN" then
+        chatCheckbox:SetChecked(NewTestDB.chatEnabled or false)
+        UpdateXP()
+    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+        local timestamp, subevent, srcGUID, srcName, srcFlags, destGUID, destName, destFlags = ...
+        if subevent == "PARTY_KILL" and srcGUID == UnitGUID("player") then
+            lastKilledUnit = destName
+            UpdateXP()
+        end
+    end
+end)
+
+-- Checkbox handler
+chatCheckbox:SetScript("OnClick", function(self)
+    NewTestDB.chatEnabled = self:GetChecked()
+    print("Exp Info In Chat: " .. (NewTestDB.chatEnabled and "Enabled" or "Disabled"))
+end)
+
+-- Slash command
+SLASH_EXPINFO1 = "/expinfo"
+SlashCmdList["EXPINFO"] = function()
+    if frame:IsShown() then
+        frame:Hide()
+    else
+        frame:Show()
+        UpdateXP()
+    end
+end
+
+
+-------------------------------------------------------------------------------
+-- ADD FRIEND POPUP -----------------------------------------------------------
+-------------------------------------------------------------------------------
+
+-- Create the main popup frame
+local frame = CreateFrame("Frame", "AddFriendFrame", UIParent)
+frame:SetSize(250, 120)
+frame:SetPoint("CENTER")
+frame:Hide()
+frame:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+frame:SetBackdropColor(0, 0, 0, 0.9)
+
+-- Make frame draggable
+frame:SetMovable(true)
+frame:EnableMouse(true)
+frame:SetScript("OnMouseDown", function(self, button)
+    if button == "LeftButton" then
+        self:StartMoving()
+    end
+end)
+frame:SetScript("OnMouseUp", function(self)
+    self:StopMovingOrSizing()
+end)
+
+-- Close with Escape
+frame:EnableKeyboard(true)
+frame:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        self:Hide()
+    end
+end)
+tinsert(UISpecialFrames, "AddFriendFrame")
+
+-- Close button
+local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+closeButton:SetPoint("TOPRIGHT", -2, -2)
+closeButton:SetScript("OnClick", function() frame:Hide() end)
+
+-- Title
+frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+frame.title:SetPoint("TOP", frame, "TOP", 0, -5)
+frame.title:SetText("Add Friend")
+
+-- Edit box for entering the friend's name
+local editBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+editBox:SetSize(200, 20)
+editBox:SetPoint("TOP", frame, "TOP", 0, -30)
+editBox:SetAutoFocus(false)
+editBox:SetMaxLetters(12) -- WoW 3.3.5 character name limit
+editBox:SetFontObject("GameFontNormal")
+
+-- Add Friend button
+local addButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+addButton:SetSize(100, 22)
+addButton:SetPoint("TOP", editBox, "BOTTOM", 0, -10)
+addButton:SetText("Add Friend")
+addButton:SetScript("OnClick", function()
+    local name = editBox:GetText():trim()
+    if name and name ~= "" then
+        -- Send friend request in WoW 3.3.5
+        AddFriend(name)
+        print("Friend request sent to: " .. name)
+        editBox:SetText("") -- Clear the edit box
+        frame:Hide() -- Close the frame
+    else
+        print("Please enter a valid name.")
+    end
+end)
+
+-- Allow Enter key to trigger the Add Friend button
+editBox:SetScript("OnEnterPressed", function()
+    addButton:Click()
+end)
+
+-- Slash command to toggle the frame
+SLASH_ADDF1 = "/addf"
+SlashCmdList["ADDF"] = function()
+    if frame:IsShown() then
+        frame:Hide()
+    else
+        frame:Show()
+        editBox:SetFocus() -- Automatically focus the edit box when opened
+    end
+end
+
+-------------------------------------------------------------------------------
+-- END ADD FRIEND POPUP -----------------------------------------------------------
+-------------------------------------------------------------------------------
