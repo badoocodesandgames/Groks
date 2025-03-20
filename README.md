@@ -2,6 +2,8 @@ Latest Working Version Currently
 
 opens a Popup with /expinfo and shows and updates while you kill stuff and gain exp.
 
+also opens a popup with /addf opens a popup to type friend name in to add to your friend list.
+
 +---------------------+
 
 |  Experience Info    |
